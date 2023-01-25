@@ -1,0 +1,114 @@
+---
+title: "Assignment 3"
+author: "Wen-Ling Ku (5825066), Ethan Hung (5674306)"
+output:
+  pdf_document: default
+  html_document: default
+date: "2022-11-20"
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(plm)
+library(ggplot2)
+spon = read.csv("did_sponsored_ads.csv")
+
+```
+## (a)	What is Wrong with Bob’s RoI Calculation?
+
+Bob claims that "the average probability of making a purchase via a website is 12%" based on his ROI assessment. On the landing page, Bob views the CTR (click-through rate) as a conversion. Ad Clicks / (Sponsored Clicks + Organic Clicks) is the CTR in this instance. This formula, however, overlooks users who never click on sponsored or organic results.
+
+Moreover, if we investigate how Bob locates clients who click on his advertisements. Customers that use "Bazaar" to search and subsequently click on an advertisement are already doing their searching on Bazaar. They should have clicked the link in the organic listing even if it hadn't been added because they expressly typed "Bazaar" into the search bar. This category of clients can be obtained by Bazaar for nothing.
+
+
+## (b)	Define the Treatment and Control.
+
+The unit of observation is the weekly traffic from each platform. The searching platform Google is set as a treatment group whereas all the other platforms (Bing, yahoo, ask) are set as control groups.
+
+## (c)	Consider a First Difference Estimate.
+
+```{r}
+spon<-spon%>%select(platform,week,avg_org)
+spon$treatment<-ifelse(spon$platform=='goog','treatment','control')
+spon$treatment<-as.factor(spon$treatment)
+spon<-spon%>%select(-platform)
+spon$After<-ifelse(spon$week>9, 1, 0)
+spon$week<-as.factor(spon$week)
+spon$After<-factor(spon$After,level=unique(c( 0, 1)))
+
+fd_reg<-lm(avg_org~After,data=filter(spon,treatment=='treatment'))
+summary(fd_reg)
+```
+
+
+```{r}
+spon %>% group_by(treatment,After) %>% summarise(mean_avg_org = mean(avg_org))
+```
+
+```{r}
+per_change = (4277.3)/2266.7 *100
+per_change 
+```
+
+For treated group, we built a regression model (avg org = beta 0 + beta 1 After) (Google). The intervention is represented by a dummy variable. After eliminating sponsored search ads, there was an average rise of 4277.3 average organic clicks, according to the coefficient of beta 1. The mean of the average organic click prior to the intervention is 2266.7. The percentage change is 188.7% as a result.
+
+However, it is not a good idea to solely rely on this number as the target variable ,average organic clicks, will change over time. Beta_1 estimate has a high probability of amplifying the causal effect of the intervention. Comparing the before and after of treated units is unreliable. Instead, a control group should be used to reflect the alternative facts and show what would have happened in the absence of the intervention.
+
+## (d)	Calculate the Difference-in-Differences.
+
+```{r}
+# Check Parallel Trends Assumptions Before DiD Analysis
+ass <-lm(avg_org~week*treatment,data=spon)
+summary(lm(ass))
+```
+
+We determine the validity of the parallel trend assumption before doing the DiD analysis. We discovered that the interaction between weeks 1 and 9 was not statistically significant, indicating that the parallelism hypothesis was accepted. We deduced that the treatment effect was effective since the 10–12 week interaction was significant at the 10% level of significance.
+
+
+```{r}
+did<-lm(avg_org~ After + treatment + After*treatment,data=spon)
+summary(did)
+```
+
+We created a regression model with the formula: avg org = beta 0 + beta 1 After + beta 2 treatment + beta 3 Aftertreatment, where After stands for the intervention, and treatment for the treatment group. The average organic click for the treatment group and the control group are shown in beta 3 as changes over time. Therefore, stopping sponsored serving has a 2293.2 causal effect. The average number of organic hits would have increased by 2293.2 if we had stopped using sponsored search advertisements.
+
+Since the current estimate is lower than the prior one, the earlier estimate was unreliable. We would increase causal effects inaccurately if we just took into account treated units.
+
+
+## (e)	Given Your Treatment Effect Estimate, Fix Bob’s RoI Calculation.
+
+We built a model to determine whether Google's average sponsored clicks from week 1 to week 9 were different from all other platforms to get Google's average sponsored clicks after week 10 (avg spons = beta 0 + beta 1 treatment). We came to the conclusion that there was no discernible difference in the mean sponsored clicks between the treatment and control groups since the p-value for beta 1 was so high at 0.063. In order to determine the treatment group, we used the average number of sponsored clicks in the control group after week 10 (9855.9).
+
+
+```{r}
+#Whether the average sponsor differs between control and treatment group
+#before week 10?
+df<-read.csv("did_sponsored_ads.csv")
+df<-df%>%select(platform,week,avg_spons)
+df$treatment<-ifelse(df$platform=='goog','treatment','control')
+df$treatment<-as.factor(df$treatment)
+df<-df%>%select(-platform)
+df$After<-ifelse(df$week>9,1,0)
+df$week<-as.factor(df$week)
+df$After<-factor(df$After,level=unique(c(0,1)))
+
+model<-lm(avg_spons~treatment,data=filter(df,After==0))
+summary(model)
+
+```
+
+Given that the p-value for the treatment is large, we conclude that average sponsors for treatment and control group are similar before week 10.
+
+Then, the average sponsor of the control group is used to estimate the average sponsor of the treatment group after week 9.
+
+```{r}
+m<-df%>%filter(After== 1 & treatment=='control')
+mean(m$avg_spons)
+ROI= (2.52-0.6) * (9855.9-2293.2)/(9855.9 * 0.60)
+ROI
+```
+
+Google's sponsored advertising would have received an average of 9855.9 clicks each day if they did not stop the sponsored ads. However, some of these clicks were organic (2293.2). The ROI should be changed as a result by (9855.9 - 2293.2)/9855.9. The adjusted ROI is 245.54%.
+
