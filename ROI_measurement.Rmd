@@ -1,6 +1,5 @@
 ---
-title: "Assignment 3"
-author: "Wen-Ling Ku (5825066), Ethan Hung (5674306)"
+author: "Wen-Ling Ku"
 output:
   pdf_document: default
   html_document: default
